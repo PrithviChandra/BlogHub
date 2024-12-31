@@ -11,6 +11,7 @@ from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 # Import your forms from the forms.py
 from forms import CreatePostForm, RegisterForm, LoginForm, CommentForm
+import smtplib
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = '8BYkEfBA6O6donzWlSihBXox7C0sKR6b'
@@ -18,10 +19,6 @@ ckeditor = CKEditor(app)
 Bootstrap5(app)
 
 
-# TODO: Configure Flask-Login
-
-
-# CREATE DATABASE
 class Base(DeclarativeBase):
     pass
 
@@ -47,7 +44,7 @@ gravatar = Gravatar(app,
                     use_ssl=False,
                     base_url=None)
 
-# CONFIGURE TABLES
+
 class BlogPost(db.Model):
     __tablename__ = "blog_posts"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -61,7 +58,6 @@ class BlogPost(db.Model):
     comments = relationship("Comment",back_populates="parent_post")
 
 
-# TODO: Create a User table for all your registered users.
 class User(UserMixin, db.Model):
     __tablename__ = "users"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -89,16 +85,13 @@ with app.app_context():
 def admin_only(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        #If id is not 1 then return abort with 403 error
         if current_user.id != 1:
             return abort(403)
-        #Otherwise continue with the route function
         return f(*args, **kwargs)
 
     return decorated_function
 
 
-# TODO: Use Werkzeug to hash the user's password when creating a new user.
 @app.route('/register', methods=["GET", "POST"])
 def register():
     form = RegisterForm()
@@ -118,13 +111,11 @@ def register():
             db.session.add(new_user)
             db.session.commit()
 
-            #authenticating user upon registering
             login_user(new_user)
             return redirect(url_for("get_all_posts"))
     return render_template("register.html", form=form, current_user=current_user)
 
 
-# TODO: Retrieve a user from the database based on their email. 
 @app.route('/login', methods=["GET", "POST"])
 def login():
     form = LoginForm()
@@ -161,7 +152,6 @@ def get_all_posts():
     return render_template("index.html", all_posts=posts, current_user=current_user)
 
 
-# TODO: Allow logged-in users to comment on posts
 @app.route("/post/<int:post_id>",methods=["GET","POST"])
 def show_post(post_id):
     requested_post = db.get_or_404(BlogPost, post_id)
@@ -184,7 +174,6 @@ def show_post(post_id):
     return render_template("post.html", post=requested_post, current_user=current_user, form=comment_form)
 
 
-# TODO: Use a decorator so only an admin user can create a new post
 @app.route("/new-post", methods=["GET", "POST"])
 @admin_only
 def add_new_post():
@@ -204,7 +193,6 @@ def add_new_post():
     return render_template("make-post.html", form=form, current_user=current_user)
 
 
-# TODO: Use a decorator so only an admin user can edit a post
 @app.route("/edit-post/<int:post_id>", methods=["GET", "POST"])
 @admin_only
 def edit_post(post_id):
@@ -227,7 +215,6 @@ def edit_post(post_id):
     return render_template("make-post.html", form=edit_form, is_edit=True, current_user=current_user)
 
 
-# TODO: Use a decorator so only an admin user can delete a post
 @app.route("/delete/<int:post_id>")
 @admin_only
 def delete_post(post_id):
@@ -242,8 +229,37 @@ def about():
     return render_template("about.html", current_user=current_user)
 
 
-@app.route("/contact")
+@app.route("/contact",methods=['GET','POST'])
 def contact():
+    if request.method=='POST':
+        name = request.form.get('name')
+        email = request.form.get('email')
+        phone = request.form.get('phone')
+        message = request.form.get('message')
+
+        subject = f"Hi from {name}"
+        email_message = f"""
+        You have received new message from {name}.
+        Email: {email}
+        Phone: {phone}
+        Message:
+        {message}"""
+
+        try:
+            smtp_server = "smtp.gmail.com"
+            smtp_port = 587
+            sender_email = "prithvi.bchandran@gmail.com"
+            sender_password = "bzfcaoisxmpgipnm"
+            with smtplib.SMTP(smtp_server, smtp_port) as server:
+                server.starttls()
+                server.login(sender_email,sender_password)
+                server.sendmail(from_addr=sender_email,to_addrs="chandraprithvi.official@gmail.com",msg=f"Subject: {subject}\n\n{email_message}")
+            flash("Your message has been sent successfully!", "success")
+            return redirect(url_for('contact'))
+        except Exception as e:
+            flash(f"Failed to send your message. Error: {str(e)}", "danger")
+            return redirect(url_for('contact'))
+
     return render_template("contact.html", current_user=current_user)
 
 
